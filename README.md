@@ -1,2 +1,69 @@
 # live-telemetry-for-esp32
-this code connects to esp 32 via ip adress given by it and it shows  the live graphs of  altitude vs time and velocity vs time from the real time data 
+#this code connects to esp 32 via ip adress given by it and it shows  the live graphs of  altitude vs time and velocity vs time from the real time data 
+import sys
+import socket
+from PyQt5.QtWidgets import QApplication, QMainWindow
+from pyqtgraph import PlotWidget, plot
+import pyqtgraph as pg
+from PyQt5.QtCore import QTimer
+import datetime
+
+class TelemetryApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("CanSat Live Telemetry - WiFi Mode")
+        self.setGeometry(100, 100, 800, 600)
+
+         #Graphs setup
+        self.graph1 = pg.PlotWidget(self)
+        self.graph1.setGeometry(50, 50, 700, 250)
+        self.graph1.setTitle("Altitude vs Time")
+        self.graph1.setLabel('left', 'Altitude (m)')
+        self.graph1.setLabel('bottom', 'Time (s)')
+
+        self.graph2 = pg.PlotWidget(self)
+        self.graph2.setGeometry(50, 320, 700, 250)
+        self.graph2.setTitle("Velocity vs Time")
+        self.graph2.setLabel('left', 'Velocity (m/s)')
+        self.graph2.setLabel('bottom', 'Time (s)')
+
+        self.alt_data = []
+        self.vel_data = []
+        self.time_data = []
+
+        # Networking
+        self.esp_ip = '192.168.4.1'  # Replace with ESP32 IP (in Station or AP mode)
+        self.port = 1234  # Port ESP sends to
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            self.sock.connect((self.esp_ip, self.port))
+            self.sock.setblocking(False)
+        except Exception as e:
+            print(f"[!] Could not connect: {e}")
+
+        # Timer to update plots
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_plot)
+        self.timer.start(100)  # 10 updates/sec
+
+    def update_plot(self):
+        try:
+            data = self.sock.recv(1024).decode().strip()
+            for line in data.split('\n'):
+                parts = line.split(',')
+                if len(parts) == 3:
+                    timestamp, altitude, velocity = map(float, parts)
+                    self.time_data.append(timestamp)
+                    self.alt_data.append(altitude)
+                    self.vel_data.append(velocity)
+
+                    self.graph1.plot(self.time_data, self.alt_data, clear=True, pen=pg.mkPen(width=2))
+                    self.graph2.plot(self.time_data, self.vel_data, clear=True, pen=pg.mkPen(width=2))
+        except:
+            pass  # No data received
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    mainWin = TelemetryApp()
+    mainWin.show()
+    sys.exit(app.exec_())
